@@ -1,60 +1,101 @@
 #include <WiFi.h>
-#include <HTTPClient.h>
+#include <PubSubClient.h>
 
-const char *ssid = "username";
-const char *password = "password";
+const char *ssid =
+    "CDAC";
 
-const char *url =
-  "http://:8000/firmware_info.json";
+const char *password =
+    "321";
+
+const char *mqttServer =
+    "wifi_ipaddress";
+
+
+
+WiFiClient espClient;
+
+PubSubClient client(espClient);
+
+void callback(
+    char *topic,
+    byte *payload,
+    unsigned int length)
+{
+    Serial.print("Topic: ");
+    Serial.println(topic);
+
+    Serial.print("Message: ");
+
+    for (unsigned int i = 0;
+         i < length;
+         i++)
+    {
+        Serial.print((char)payload[i]);
+    }
+
+    Serial.println();
+}
+
+void connectMQTT()
+{
+    while (!client.connected())
+    {
+        Serial.println(
+            "Connecting MQTT...");
+
+        String clientId =
+            "ESP32-" +
+            String((uint32_t)ESP.getEfuseMac(), HEX);
+
+        if (client.connect(clientId.c_str()))
+        {
+            Serial.println(
+                "MQTT Connected");
+
+            client.subscribe(
+                "firmware/update");
+
+            Serial.println(
+                "Subscribed firmware/update");
+        }
+        else
+        {
+            Serial.print("Failed: ");
+            Serial.println(client.state());
+
+            delay(2000);
+        }
+    }
+}
 
 void setup()
 {
-  Serial.begin(115200);
+    Serial.begin(115200);
 
-  WiFi.begin(ssid, password);
+    WiFi.begin(ssid, password);
 
-  Serial.print("Connecting");
+    while (WiFi.status() != WL_CONNECTED)
+    {
+        delay(500);
+    }
 
-  while (WiFi.status() != WL_CONNECTED)
-  {
-    delay(500);
-    Serial.print(".");
-  }
+    Serial.println("WiFi Connected");
 
-  Serial.println();
-  Serial.println("WiFi Connected");
+    client.setServer(
+        mqttServer,
+        1883);
 
-  HTTPClient http;
+    client.setCallback(callback);
 
-  Serial.println("Connecting to OTA Server...");
-
-  http.begin(url);
-
-  int httpCode = http.GET();
-
-  Serial.print("HTTP Code: ");
-  Serial.println(httpCode);
-
-  if (httpCode == HTTP_CODE_OK)
-  {
-    String response = http.getString();
-
-    Serial.println("Server Connection Successful");
-    Serial.println("Response:");
-
-    Serial.println(response);
-  }
-  else
-  {
-    Serial.println("Server Connection Failed");
-
-    Serial.print("Error: ");
-    Serial.println(http.errorToString(httpCode));
-  }
-
-  http.end();
+    connectMQTT();
 }
 
 void loop()
 {
+    if (!client.connected())
+    {
+        connectMQTT();
+    }
+
+    client.loop();
 }
